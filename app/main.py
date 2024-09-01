@@ -2,19 +2,22 @@
 
 from typing import Any, Union
 
-from fastapi import Body, FastAPI, Path
+from fastapi import FastAPI, Path
 from pydantic import BaseModel
+from pydantic.fields import Field
 from typing_extensions import Annotated
 
 app = FastAPI()
 
 
 class Item(BaseModel):
-    """model for Item
-    """
+    """model for Item"""
+
     name: str
-    description: Union[str, None] = None
-    price: float
+    description: Union[str, None] = Field(
+        default=None, description="description for the item", max_length=300
+    )
+    price: float = Field(gt=0, description="price of the item")
     tax: Union[float, None] = None
 
 
@@ -26,54 +29,10 @@ def update_item(
     q: Union[str, None] = None,
     item: Union[Item, None] = None,
 ):
-    """example with Path, Query and Body
-    """
+    """example with Path, Query and Body"""
     results: Any = {"item_id": item_id}
     if q:
         results.update({"q": q})
     if item:
         results.update({"item": item})
-    return results
-
-
-class User(BaseModel):
-    """model for Item
-    """
-    username: str
-    fullname: Union[str, None] = None
-
-
-@app.get("/items/user/{item_id}")
-def update_item_user(
-    item_id: Annotated[
-        int, Path(description="The ID of the item to get", gt=0, le=1000)
-    ],
-    item: Item,
-    user: User,
-    importance: Annotated[int, Body()]
-):
-    """example with multiple body params
-    """
-    results: Any = {
-        "item_id": item_id,
-        "item": item,
-        "user": user,
-        "importance": importance,
-    }
-    return results
-
-
-@app.get("/items/embed/{item_id}")
-def update_item_embed(
-    item_id: Annotated[
-        int, Path(description="The ID of the item to get", gt=0, le=1000)
-    ],
-    item: Annotated[Item, Body(embed=True)],
-):
-    """example with multiple body params
-    """
-    results: Any = {
-        "item_id": item_id,
-        "item": item,
-    }
     return results
