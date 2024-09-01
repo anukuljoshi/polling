@@ -2,30 +2,78 @@
 
 from typing import Any, Union
 
-from fastapi import FastAPI, Path, Query
+from fastapi import Body, FastAPI, Path
+from pydantic import BaseModel
 from typing_extensions import Annotated
 
 app = FastAPI()
 
 
-@app.get("/items/{item_id}")
-def read_items(
-    item_id: Annotated[
-        int, Path(description="The ID of the item to get", gt=5, le=10)
-    ],
-    q: Annotated[Union[str, None], Query(alias="item-query")] = None,
-):
-    """path param validation
-
-    Args:
-    ----
-        item (Item): data for item
-
-    Returns:
-    -------
-        created item
+class Item(BaseModel):
+    """model for Item
     """
-    results: dict[str, Any] = {"item_id": item_id}
+    name: str
+    description: Union[str, None] = None
+    price: float
+    tax: Union[float, None] = None
+
+
+@app.get("/items/{item_id}")
+def update_item(
+    item_id: Annotated[
+        int, Path(description="The ID of the item to get", gt=0, le=1000)
+    ],
+    q: Union[str, None] = None,
+    item: Union[Item, None] = None,
+):
+    """example with Path, Query and Body
+    """
+    results: Any = {"item_id": item_id}
     if q:
         results.update({"q": q})
+    if item:
+        results.update({"item": item})
+    return results
+
+
+class User(BaseModel):
+    """model for Item
+    """
+    username: str
+    fullname: Union[str, None] = None
+
+
+@app.get("/items/user/{item_id}")
+def update_item_user(
+    item_id: Annotated[
+        int, Path(description="The ID of the item to get", gt=0, le=1000)
+    ],
+    item: Item,
+    user: User,
+    importance: Annotated[int, Body()]
+):
+    """example with multiple body params
+    """
+    results: Any = {
+        "item_id": item_id,
+        "item": item,
+        "user": user,
+        "importance": importance,
+    }
+    return results
+
+
+@app.get("/items/embed/{item_id}")
+def update_item_embed(
+    item_id: Annotated[
+        int, Path(description="The ID of the item to get", gt=0, le=1000)
+    ],
+    item: Annotated[Item, Body(embed=True)],
+):
+    """example with multiple body params
+    """
+    results: Any = {
+        "item_id": item_id,
+        "item": item,
+    }
     return results
