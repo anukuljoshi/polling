@@ -61,6 +61,7 @@ def update_item(item_id: int, item: Item):
 
 class ModelName(str, Enum):
     """enum class for model_name"""
+
     alexnet = "alexnet"
     resnet = "resnet"
     lenet = "lenet"
@@ -85,3 +86,26 @@ def get_model(model_name: ModelName):
         return {"model_name": model_name, "message": "LeCNN all the images"}
 
     return {"model_name": model_name, "message": "Have some residuals"}
+
+
+fake_items_db = [
+    {"item_name": "Foo"},
+    {"item_name": "Bar"},
+    {"item_name": "Baz"},
+]
+
+
+@app.get("/items/")
+def read_item2(skip: int = 0, limit: int = 10):
+    """read items from fake db
+
+    Args:
+    ----
+        skip: number of items to skip
+        limit: number of items to list
+
+    Returns:
+    -------
+        list of items starting from skip with limit
+    """
+    return fake_items_db[skip : skip + limit]
