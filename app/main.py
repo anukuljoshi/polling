@@ -1,38 +1,50 @@
 """base file for the application."""
 
-from typing import Any, Union
+from typing import List, Set, Union
 
-from fastapi import FastAPI, Path
+from fastapi import FastAPI
 from pydantic import BaseModel
-from pydantic.fields import Field
-from typing_extensions import Annotated
+from pydantic.networks import HttpUrl
 
 app = FastAPI()
+
+
+class Image(BaseModel):
+    """model for Image"""
+
+    url: HttpUrl
+    name: str
 
 
 class Item(BaseModel):
     """model for Item"""
 
     name: str
-    description: Union[str, None] = Field(
-        default=None, description="description for the item", max_length=300
-    )
-    price: float = Field(gt=0, description="price of the item")
+    description: Union[str, None] = None
+    price: float
     tax: Union[float, None] = None
+    tags: Set[str] = set()
+    image: Union[Image, None] = None
+    images: Union[List[Image], None] = None
 
 
-@app.get("/items/{item_id}")
-def update_item(
-    item_id: Annotated[
-        int, Path(description="The ID of the item to get", gt=0, le=1000)
-    ],
-    q: Union[str, None] = None,
-    item: Union[Item, None] = None,
-):
-    """example with Path, Query and Body"""
-    results: Any = {"item_id": item_id}
-    if q:
-        results.update({"q": q})
-    if item:
-        results.update({"item": item})
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, item: Item):
+    """example 1 for nested models"""
+    results = {"item_id": item_id, "item": item}
     return results
+
+
+class Offer(BaseModel):
+    """model for Offer"""
+
+    name: str
+    description: Union[str, None] = None
+    price: float
+    items: List[Item]
+
+
+@app.post("/offers/")
+async def create_offer(offer: Offer):
+    """example 2 for nested models"""
+    return offer
