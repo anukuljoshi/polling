@@ -74,12 +74,12 @@ class BaseUser(BaseModel):
     full_name: Union[str, None] = None
 
 
-class UserIn(BaseUser):
+class UserIn2(BaseUser):
     """model class for UserIn"""
     password: str
 
 
 @app.post("/user/")
-async def create_user2(user: UserIn) -> BaseUser:
+async def create_user2(user: UserIn2) -> BaseUser:
     """example 2 with hidden data in response"""
     return user
