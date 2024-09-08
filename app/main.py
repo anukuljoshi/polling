@@ -1,91 +1,119 @@
-from typing import List
+from typing import Any, Union
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    status,
+)
+from fastapi.params import Depends
+from fastapi.security.oauth2 import (
+    OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm,
+)
+from pydantic.main import BaseModel
+from typing_extensions import Annotated
 
 app = FastAPI()
 
-html = """
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-        <h2>Your ID: <span id="ws-id"></span></h2>
-        <form action="" onsubmit="sendMessage(event)">
-            <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-            var client_id = Date.now()
-            document.querySelector("#ws-id").textContent = client_id;
-            var ws = new WebSocket(`ws://localhost:8000/ws/${client_id}`);
-            ws.onmessage = function(event) {
-                var messages = document.getElementById('messages')
-                var message = document.createElement('li')
-                var content = document.createTextNode(event.data)
-                message.appendChild(content)
-                messages.appendChild(message)
-            };
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
-    </body>
-</html>
-"""
+
+fake_users_db: "dict[Any, Any]" = {
+    "johndoe": {
+        "username": "johndoe",
+        "full_name": "John Doe",
+        "email": "johndoe@example.com",
+        "hashed_password": "fakehashedsecret",
+        "disabled": False,
+    },
+    "alice": {
+        "username": "alice",
+        "full_name": "Alice Wonderson",
+        "email": "alice@example.com",
+        "hashed_password": "fakehashedsecret2",
+        "disabled": True,
+    },
+}
 
 
-class ConnectionManager:
-    """service class to manage websocket connections"""
-
-    def __init__(self) -> None:
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, ws: WebSocket):
-        """accept a new websocket connection"""
-        await ws.accept()
-        self.active_connections.append(ws)
-
-    async def disconnect(self, ws: WebSocket):
-        """disconnect a new websocket connection"""
-        self.active_connections.remove(ws)
-
-    async def send_personal_message(self, message: str, ws: WebSocket):
-        """send data to a specific websocket"""
-        await ws.send_text(message)
-
-    async def broadcast(self, message: str):
-        """send data to a all websockets"""
-        for connection in self.active_connections:
-            await connection.send_text(message)
+def fake_hash_password(password: str):
+    """function to mock hashing of password"""
+    return "fakehashed" + password
 
 
-manager = ConnectionManager()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-@app.get("/")
-async def get():
-    """home page handler"""
-    return HTMLResponse(html)
+class User(BaseModel):
+    """pydantic model class for user"""
+
+    username: str
+    email: Union[str, None] = None
+    full_name: Union[str, None] = None
+    disabled: Union[bool, None] = None
 
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: int):
-    """websocket handler"""
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await manager.send_personal_message(f"You wrote: {data}", websocket)
-            await manager.broadcast(f"Client #{client_id} says: {data}")
-    except WebSocketDisconnect:
-        await manager.disconnect(websocket)
-        await manager.broadcast(f"Client #{client_id} left the chat")
+class UserInDB(User):
+    """user model with hashed_password"""
+
+    hashed_password: str
+
+
+def get_user(db: Any, username: str):
+    """get user from mock db"""
+    if username in db:
+        user_dict = db[username]
+        return UserInDB(**user_dict)
+
+
+def fake_decode_token(token: str):
+    """function to mock token decoding"""
+    # This doesn't provide any security at all
+    # Check the next version
+    user = get_user(fake_users_db, token)
+    return user
+
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    """get current user's details"""
+    user = fake_decode_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+async def get_current_active_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """get current active user"""
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@app.post("/token")
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+    """handler for generating token using username and password"""
+    user_dict = fake_users_db.get(form_data.username)
+    if not user_dict:
+        raise HTTPException(
+            status_code=400, detail="Incorrect username or password"
+        )
+    user = UserInDB(**user_dict)
+    hashed_password = fake_hash_password(form_data.password)
+    if not hashed_password == user.hashed_password:
+        raise HTTPException(
+            status_code=400, detail="Incorrect username or password"
+        )
+
+    return {"access_token": user.username, "token_type": "bearer"}
+
+
+@app.get("/users/me")
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """handler to get current user data"""
+    return current_user
