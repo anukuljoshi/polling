@@ -1,10 +1,19 @@
-from fastapi import FastAPI
-
-from app.config import database
-from app.routers import items, users
-
-database.Base.metadata.create_all(bind=database.engine)
+from fastapi import BackgroundTasks, FastAPI
 
 app = FastAPI()
-app.include_router(users.router)
-app.include_router(items.router)
+
+
+def write_notification(email: str, message: str = ""):
+    """write notification details to log file"""
+    with open("log.txt", "w+", encoding="utf-8") as log_file:
+        content = f"notification for {email}: {message}"
+        log_file.write(content)
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    """handler to send a notification in background tasks"""
+    background_tasks.add_task(
+        write_notification, email, message="some notification"
+    )
+    return {"message": "Notification sent in the background."}
