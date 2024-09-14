@@ -1,50 +1,65 @@
-"""base file for the application."""
+from typing import List
 
-from typing import List, Set, Union
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.orm import Session
+from typing_extensions import Annotated
 
-from fastapi import FastAPI
-from pydantic import BaseModel
-from pydantic.networks import HttpUrl
+from . import crud, models, schemas
+from .database import SessionLocal, engine
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 
-class Image(BaseModel):
-    """model for Image"""
-
-    url: HttpUrl
-    name: str
-
-
-class Item(BaseModel):
-    """model for Item"""
-
-    name: str
-    description: Union[str, None] = None
-    price: float
-    tax: Union[float, None] = None
-    tags: Set[str] = set()
-    image: Union[Image, None] = None
-    images: Union[List[Image], None] = None
+# Dependency
+def get_db():
+    """middleware to get db instance in handlers"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-@app.put("/items/{item_id}")
-async def update_item(item_id: int, item: Item):
-    """example 1 for nested models"""
-    results = {"item_id": item_id, "item": item}
-    return results
+DataBaseDependency = Annotated[Session, Depends(get_db)]
 
 
-class Offer(BaseModel):
-    """model for Offer"""
+@app.post("/users/", response_model=schemas.User)
+def create_user(db: DataBaseDependency, user: schemas.UserCreate):
+    """handler for creating user"""
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
 
-    name: str
-    description: Union[str, None] = None
-    price: float
-    items: List[Item]
+
+@app.get("/users/", response_model=List[schemas.User])
+def read_users(db: DataBaseDependency, skip: int = 0, limit: int = 100):
+    """handler for getting user list"""
+    users = crud.get_users(db, skip=skip, limit=limit)
+    return users
 
 
-@app.post("/offers/")
-async def create_offer(offer: Offer):
-    """example 2 for nested models"""
-    return offer
+@app.get("/users/{user_id}", response_model=schemas.User)
+def read_user(db: DataBaseDependency, user_id: int):
+    """handler for getting user by user_id"""
+    db_user = crud.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+@app.post("/users/{user_id}/items/", response_model=schemas.Item)
+def create_item_for_user(
+    db: DataBaseDependency, user_id: int, item: schemas.ItemCreate
+):
+    """handler for creating items for a user"""
+    return crud.create_user_item(db=db, item=item, user_id=user_id)
+
+
+@app.get("/items/", response_model=List[schemas.Item])
+def read_items(db: DataBaseDependency, skip: int = 0, limit: int = 100):
+    """handler for getting list of items"""
+    items = crud.get_items(db, skip=skip, limit=limit)
+    return items
