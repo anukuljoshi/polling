@@ -1,6 +1,42 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from typing import Union
+
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel
+from typing_extensions import Annotated
+
+fake_secret_token = "coneofsilence"
+
+fake_db = {
+    "foo": {"id": "foo", "title": "Foo", "description": "There goes my hero"},
+    "bar": {"id": "bar", "title": "Bar", "description": "The bartenders"},
+}
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+class Item(BaseModel):
+    """base model for Item"""
+    id: str
+    title: str
+    description: Union[str, None] = None
+
+
+@app.get("/items/{item_id}", response_model=Item)
+async def read_main(item_id: str, x_token: Annotated[str, Header()]):
+    """get items with item_id"""
+    if x_token != fake_secret_token:
+        raise HTTPException(status_code=400, detail="Invalid X-Token header")
+    if item_id not in fake_db:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return fake_db[item_id]
+
+
+@app.post("/items/", response_model=Item)
+async def create_item(item: Item, x_token: Annotated[str, Header()]):
+    """create new item"""
+    if x_token != fake_secret_token:
+        raise HTTPException(status_code=400, detail="Invalid X-Token header")
+    if item.id in fake_db:
+        raise HTTPException(status_code=409, detail="Item already exists")
+    fake_db[item.id] = item.model_dump()
+    return item
